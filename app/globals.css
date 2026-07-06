@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #06080f;
+  color: #f7f7f2;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* Prevent iOS/Android from letting the streaming/controller views scroll. */
+.no-scroll {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* High-visibility touch targets for the controller. */
+.tap-target {
+  user-select: none;
+  touch-action: manipulation;
+}
+
+@layer utilities {
+  .text-outline {
+    text-shadow:
+      -1px -1px 0 rgba(0, 0, 0, 0.85),
+      1px -1px 0 rgba(0, 0, 0, 0.85),
+      -1px 1px 0 rgba(0, 0, 0, 0.85),
+      1px 1px 0 rgba(0, 0, 0, 0.85),
+      0 2px 6px rgba(0, 0, 0, 0.6);
+  }
+}
