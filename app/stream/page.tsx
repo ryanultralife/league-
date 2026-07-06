@@ -8,6 +8,7 @@ import { BroadcastOverlay } from '@/components/Overlay';
 import { readState, COLOR_DELTA_THRESHOLD } from '@/lib/vision';
 import { drawOverlay } from '@/lib/overlayCanvas';
 import { startWhip, startRecording, type WhipSession, type Recorder } from '@/lib/streaming';
+import { SYNC_MODE } from '@/lib/sync';
 
 const WATCH_FPS = 5;
 
@@ -231,6 +232,13 @@ export default function StreamPage() {
                 {live ? 'LIVE' : 'Idle'}
               </div>
             </div>
+
+            {SYNC_MODE() === 'local' && (
+              <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-200/90 ring-1 ring-amber-500/20">
+                ⚠ Local-only: this phone won&apos;t receive the controller&apos;s overrides. Configure
+                Supabase in Vercel to sync across devices.
+              </p>
+            )}
 
             <label className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 text-sm">
               <span>Pixel-watcher CV ({WATCH_FPS} FPS)</span>

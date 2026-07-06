@@ -59,9 +59,15 @@ export default function ControllerPage() {
 
 function SyncDot() {
   const status = useGameStore((s) => s.syncStatus);
+  const peers = useGameStore((s) => s.peers);
   const color =
     status === 'connected' ? 'bg-emerald-400' : status === 'local' ? 'bg-sky-400' : 'bg-amber-400';
-  return <span className={`h-2.5 w-2.5 rounded-full ${color}`} />;
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-white/50">
+      <span className={`h-2.5 w-2.5 rounded-full ${color}`} />
+      {status === 'connected' ? `${peers}` : status === 'local' ? 'local' : '…'}
+    </span>
+  );
 }
 
 // -------------------------------------------------------------------------

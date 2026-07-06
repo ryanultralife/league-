@@ -80,16 +80,57 @@ npm run dev      # http://localhost:3000
 3. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    (see [`.env.example`](./.env.example)).
 
-Without these, the app runs in single-device **local** sync mode.
+Without these, the app runs in single-device **local** sync mode and the UI
+shows an amber "Local-only mode" warning — a quick way to confirm at launch that
+cross-device sync is actually wired.
 
-## Deploy to Vercel
+## Launch checklist (Supabase + Vercel)
 
-1. Push this repo and import it in Vercel.
-2. Add the `NEXT_PUBLIC_SUPABASE_*` env vars if using Supabase.
-3. Deploy. Vercel serves HTTPS by default, satisfying the secure-context
-   requirement for the native browser APIs. [`next.config.js`](./next.config.js)
+1. **Supabase** → create a project. Copy the Project URL and the `anon` public
+   key from *Project Settings → API*. Realtime is on by default; the live sync
+   path uses **broadcast**, so no tables or SQL are required to go live.
+   (Optionally run [`supabase/schema.sql`](./supabase/schema.sql) for durable
+   persistence.)
+2. **Vercel** → import this repo and add env vars for **Production** (and
+   Preview if you use it):
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_GAME_ROOM` — optional; any string. All devices sharing this
+     value join the same game. Keep it identical across phones (they inherit it
+     from the shared deployment), or run two simultaneous games by giving each
+     its own room.
+3. **Deploy.** Vercel serves HTTPS by default, satisfying the secure-context
+   requirement for camera + Web Bluetooth. [`next.config.js`](./next.config.js)
    sets the `Permissions-Policy` (bluetooth/camera) and
    `upgrade-insecure-requests` headers.
+4. On each phone, open the deployment and **Add to Home Screen** to install it
+   as a standalone PWA. The home screen shows a green **"Synced · N"** badge with
+   the live device count once Supabase is connected.
+
+## Multi-device topology (master + video phone)
+
+Because sync runs through Supabase in the cloud, devices do **not** need to be on
+the same network — the master phone and the video phone can be on different
+Wi-Fi, or the video phone can ride the master's hotspot, and they'll still stay
+in sync as long as each has internet.
+
+- **Master phone** → open `/controller` (and `/lineup`). This is the authority:
+  radar intake, manual count/score overrides, calibration.
+- **Video phone** (an older phone hung over the field) → open `/stream`. It runs
+  the camera, the pixel-watcher, and the outgoing broadcast.
+- **Late join is handled:** when the video phone connects after the master
+  already has a game going, it immediately requests and adopts the current state
+  (it won't sit blank until the next change).
+- **Manual beats CV:** whenever the master makes a manual edit, the video phone's
+  pixel-watcher backs off for a few seconds so a correction isn't instantly
+  overwritten by the next camera frame. CV resumes automatically once the
+  operator stops touching the controls.
+
+> Reliability tips for an older video phone: keep `/stream` in the foreground
+> (installed as a PWA with the screen wake-lock the app requests), and prefer a
+> stable power source — camera + encoding + upload is battery-intensive. Web
+> Bluetooth is unsupported on iOS, so use the Android phone as the master for the
+> radar; the video phone only needs a working camera.
 
 ## PWA
 

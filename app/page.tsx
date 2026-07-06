@@ -29,8 +29,10 @@ const CARDS = [
 export default function Home() {
   useHydratedStore();
   const status = useGameStore((s) => s.syncStatus);
+  const peers = useGameStore((s) => s.peers);
   const home = useGameStore((s) => s.state.session.home_name);
   const guest = useGameStore((s) => s.state.session.guest_name);
+  const mode = SYNC_MODE();
 
   return (
     <main className="min-h-screen bg-broadcast px-5 py-10 sm:px-8">
@@ -43,8 +45,18 @@ export default function Home() {
               <p className="text-sm text-white/50">Live baseball broadcast control</p>
             </div>
           </div>
-          <SyncBadge status={status} />
+          <SyncBadge status={status} peers={peers} />
         </header>
+
+        {mode === 'local' && (
+          <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100/90">
+            <strong className="font-bold">⚠ Local-only mode.</strong> Supabase isn&apos;t
+            configured, so devices <em>will not</em> sync across phones. Set{' '}
+            <code className="rounded bg-black/30 px-1">NEXT_PUBLIC_SUPABASE_URL</code> and{' '}
+            <code className="rounded bg-black/30 px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in Vercel
+            to connect the master and video phones (works across Wi-Fi / hotspot).
+          </div>
+        )}
 
         <div className="mb-8 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
           <div className="flex items-center justify-between">
@@ -55,7 +67,7 @@ export default function Home() {
               </strong>
             </span>
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs uppercase tracking-wide">
-              sync: {SYNC_MODE()}
+              sync: {mode} · {peers} device{peers === 1 ? '' : 's'}
             </span>
           </div>
         </div>
@@ -93,7 +105,13 @@ export default function Home() {
   );
 }
 
-function SyncBadge({ status }: { status: 'connecting' | 'connected' | 'local' }) {
+function SyncBadge({
+  status,
+  peers,
+}: {
+  status: 'connecting' | 'connected' | 'local';
+  peers: number;
+}) {
   const map = {
     connected: { dot: 'bg-emerald-400', label: 'Synced' },
     connecting: { dot: 'bg-amber-400 animate-pulse', label: 'Connecting' },
@@ -104,6 +122,7 @@ function SyncBadge({ status }: { status: 'connecting' | 'connected' | 'local' })
     <span className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70">
       <span className={`h-2 w-2 rounded-full ${s.dot}`} />
       {s.label}
+      {status === 'connected' && <span className="text-white/40">· {peers}</span>}
     </span>
   );
 }

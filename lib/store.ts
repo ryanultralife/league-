@@ -14,11 +14,22 @@ import { makeInitialState } from './defaults';
 
 const PERSIST_KEY = 'diamond-overlay:state';
 
+/**
+ * After a human edit arrives from another device, the pixel-watcher defers for
+ * this long so a manual correction isn't immediately clobbered by CV. CV
+ * resumes once the operator stops touching the controls.
+ */
+const VISION_SUPPRESS_MS = 8000;
+
 interface StoreApi {
   state: GameState;
   origin: string;
   ready: boolean;
   syncStatus: 'connecting' | 'connected' | 'local';
+  /** Number of devices currently connected to the game room. */
+  peers: number;
+  /** Local epoch (ms) until which the pixel-watcher should defer to a human. */
+  suppressVisionUntil: number;
 
   // Lifecycle
   hydrate: () => void;
@@ -90,7 +101,7 @@ export const useGameStore = create<StoreApi>((set, get) => {
       draft.origin = origin;
       if (publish && typeof window !== 'undefined') {
         try {
-          getTransport().publish(draft);
+          getTransport().send('state', draft);
           localStorage.setItem(PERSIST_KEY, JSON.stringify(draft));
         } catch {
           /* ignore */
@@ -100,15 +111,27 @@ export const useGameStore = create<StoreApi>((set, get) => {
     });
   }
 
+  /** Adopt an incoming full-state document from a peer, and persist it. */
+  function adopt(remote: GameState) {
+    set({ state: remote });
+    try {
+      localStorage.setItem(PERSIST_KEY, JSON.stringify(remote));
+    } catch {
+      /* ignore */
+    }
+  }
+
   return {
     state: makeInitialState(origin),
     origin,
     ready: false,
     syncStatus: 'connecting',
+    peers: 1,
+    suppressVisionUntil: 0,
 
     hydrate() {
       if (typeof window === 'undefined' || get().ready) return;
-      // Load any persisted state first.
+      // Load any persisted state first so a reconnecting device isn't blank.
       try {
         const raw = localStorage.getItem(PERSIST_KEY);
         if (raw) {
@@ -120,25 +143,42 @@ export const useGameStore = create<StoreApi>((set, get) => {
       }
 
       const transport = getTransport();
-      // Apply remote updates when they are newer or from another device.
-      transport.onMessage((remote) => {
-        const cur = get().state;
-        const isNewer = remote.rev > cur.rev || remote.origin !== origin;
-        if (remote.origin !== origin && isNewer) {
-          set({ state: remote });
-          try {
-            localStorage.setItem(PERSIST_KEY, JSON.stringify(remote));
-          } catch {
-            /* ignore */
-          }
+
+      // Steady-state broadcasts: apply when at least as new and from a peer.
+      // A remote change means a human (controller/lineup) acted, so briefly
+      // defer the pixel-watcher to it — manual input overrides CV.
+      transport.on('state', (remote: GameState) => {
+        if (!remote || remote.origin === origin) return;
+        if (remote.rev >= get().state.rev) {
+          adopt(remote);
+          set({ suppressVisionUntil: Date.now() + VISION_SUPPRESS_MS });
         }
       });
 
-      // Poll transport status for the UI badge.
-      const tick = () => set({ syncStatus: transport.status() });
+      // Snapshot: a peer's authoritative reply to our join request. We just
+      // joined, so adopt the highest-rev snapshot we see regardless of our
+      // (possibly stale) local rev.
+      transport.on('snapshot', (remote: GameState) => {
+        if (!remote || remote.origin === origin) return;
+        if (remote.rev >= get().state.rev || get().state.rev === 0) adopt(remote);
+      });
+
+      // A peer just joined and asked for current state; answer with ours.
+      transport.on('request', () => {
+        transport.send('snapshot', get().state);
+      });
+
+      // On (re)connect, ask the room for the current state so a late-joining
+      // device (e.g. the video phone) syncs immediately instead of waiting for
+      // the next change.
+      transport.onReady(() => {
+        transport.send('request', { origin });
+      });
+
+      // Poll transport status + presence for the UI.
+      const tick = () => set({ syncStatus: transport.status(), peers: transport.peers() });
       tick();
       const interval = window.setInterval(tick, 1500);
-      // Best-effort cleanup on unload.
       window.addEventListener('beforeunload', () => window.clearInterval(interval));
 
       set({ ready: true });
@@ -209,14 +249,34 @@ export const useGameStore = create<StoreApi>((set, get) => {
         else d.session.guest_name = name.toUpperCase().slice(0, 12);
       }),
 
-    applyVision: (partial) =>
+    applyVision: (partial) => {
+      // Defer to a recent human override on any device.
+      const suppressed = Date.now() < get().suppressVisionUntil;
+      // Skip no-op frames so CV doesn't churn the sync channel at 5 FPS.
+      const cur = get().state.session;
+      const changed =
+        (!suppressed &&
+          ((partial.balls !== undefined && partial.balls !== cur.balls) ||
+            (partial.strikes !== undefined && partial.strikes !== cur.strikes) ||
+            (partial.outs !== undefined && partial.outs !== cur.outs) ||
+            (partial.bases !== undefined &&
+              (('first' in partial.bases && partial.bases.first !== cur.bases.first) ||
+                ('second' in partial.bases && partial.bases.second !== cur.bases.second) ||
+                ('third' in partial.bases && partial.bases.third !== cur.bases.third))))) ||
+        (partial.speed !== undefined && partial.speed !== cur.current_speed);
+      if (!changed) return;
       mutate((d) => {
+        // Speed comes from the radar pin and is never a human "override", so it
+        // always applies. Count/base fields are held during suppression.
+        if (partial.speed !== undefined)
+          d.session.current_speed = clamp(Math.round(partial.speed), 0, 130);
+        if (suppressed) return;
         if (partial.balls !== undefined) d.session.balls = clamp(partial.balls, 0, 3);
         if (partial.strikes !== undefined) d.session.strikes = clamp(partial.strikes, 0, 2);
         if (partial.outs !== undefined) d.session.outs = clamp(partial.outs, 0, 2);
-        if (partial.speed !== undefined) d.session.current_speed = clamp(Math.round(partial.speed), 0, 130);
         if (partial.bases) d.session.bases = { ...d.session.bases, ...partial.bases };
-      }),
+      });
+    },
 
     addPin: (pin) => mutate((d) => d.session.calibration_pins.push(pin)),
     removePin: (id) =>
