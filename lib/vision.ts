@@ -90,11 +90,14 @@ export function readState(
     }
   }
 
-  const reading: VisionReading = { bases };
-  // Only report a count when at least one pin of that kind exists, so we don't
-  // clobber manual overrides on scoreboards we haven't calibrated for.
+  const reading: VisionReading = {};
+  // Only report a field when at least one pin of that kind exists, so CV never
+  // clobbers a manual override for something we haven't calibrated. Notably,
+  // without base pins we must NOT report bases — otherwise CV would wipe runners
+  // set by hand on the controller.
   if (pins.some((p) => p.kind === 'ball')) reading.balls = hasBall ? balls : 0;
   if (pins.some((p) => p.kind === 'strike')) reading.strikes = hasStrike ? strikes : 0;
   if (pins.some((p) => p.kind === 'out')) reading.outs = hasOut ? outs : 0;
+  if (pins.some((p) => p.kind === 'onbase')) reading.bases = bases;
   return reading;
 }

@@ -105,7 +105,14 @@ export default function StreamPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    const render = () => {
+    // Composite at ~30 FPS to match captureStream and halve the per-frame work
+    // on older phones (rAF would otherwise redraw the overlay at up to 60 FPS).
+    const FRAME_MS = 1000 / 30;
+    let last = 0;
+    const render = (ts: number) => {
+      rafRef.current = requestAnimationFrame(render);
+      if (ts - last < FRAME_MS) return;
+      last = ts;
       if (video.readyState >= 2) {
         ctx.drawImage(video, 0, 0, W, H);
         try {
@@ -114,9 +121,8 @@ export default function StreamPage() {
           /* draw errors shouldn't kill the stream */
         }
       }
-      rafRef.current = requestAnimationFrame(render);
     };
-    render();
+    rafRef.current = requestAnimationFrame(render);
 
     const canvasStream = canvas.captureStream(30);
     // Mux in the mic/ambient audio track from the camera stream if present.
