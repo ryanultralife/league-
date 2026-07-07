@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/lib/store';
-import { useRole, useWakeLock } from '@/lib/hooks';
+import { useRoleGuard, useWakeLock } from '@/lib/hooks';
+import { RoleBlocked, RoleChecking } from '@/components/RoleBlocked';
 import { BroadcastOverlay } from '@/components/Overlay';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { readState, COLOR_DELTA_THRESHOLD } from '@/lib/vision';
@@ -14,7 +15,7 @@ import { SYNC_MODE } from '@/lib/sync';
 const WATCH_FPS = 5;
 
 export default function StreamPage() {
-  useRole('stream');
+  const guard = useRoleGuard('stream');
   useWakeLock(true);
 
   const applyVision = useGameStore((s) => s.applyVision);
@@ -195,6 +196,10 @@ export default function StreamPage() {
       src?.getTracks().forEach((t) => t.stop());
     };
   }, [stopCompositing]);
+
+  // Hard single-occupancy guard: only one stream device per game.
+  if (guard.phase === 'checking') return <RoleChecking label="Stream" />;
+  if (guard.phase === 'blocked') return <RoleBlocked label="Stream" onTakeover={guard.takeover} />;
 
   return (
     <main className="no-scroll bg-black">
