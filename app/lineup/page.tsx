@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useGameStore } from '@/lib/store';
 import { useHydratedStore } from '@/lib/hooks';
+import { LineupScanner } from '@/components/LineupScanner';
 import type { DefensivePosition, Player, TeamSide } from '@/lib/types';
 
 const POSITIONS: DefensivePosition[] = [
@@ -217,6 +218,8 @@ function RosterEditor({ side }: { side: TeamSide }) {
           ⏭ Next Batter
         </button>
       </div>
+
+      <LineupScanner side={side} />
 
       <div className="space-y-2">
         {sorted.map((p) => (

@@ -15,7 +15,7 @@ device stays in sync in real time.
 |-------|--------|--------------|
 | [`/stream`](./app/stream/page.tsx) | Hanging phone | Full-screen back camera + transparent broadcast overlay. Runs a hidden-canvas **pixel-watcher at 5 FPS** that reads calibration pins and pushes derived game state. Composites camera + graphics and publishes via **WHIP (WebRTC)** or records locally. |
 | [`/controller`](./app/controller/page.tsx) | Operator's phone | **Connect Radar** over Web Bluetooth, high-visibility manual count/score/base overrides, and an interactive **calibration** camera to drop scoreboard pins. |
-| [`/lineup`](./app/lineup/page.tsx) | Dugout tablet | Roster + batting-order setup, **advance current batter**, on-the-fly defensive swaps, and a **box-score editor** for hits/errors/line score. |
+| [`/lineup`](./app/lineup/page.tsx) | Dugout tablet | Roster + batting-order setup (or **scan a photo of the paper lineup card** — on-device OCR that reads positions from scorekeeping numbers), **advance current batter**, on-the-fly defensive swaps, and a **box-score editor** for hits/errors/line score. |
 
 Open [`/`](./app/page.tsx) for the hub linking all three.
 
@@ -45,6 +45,12 @@ Peers apply newer revisions (last-writer-wins via `rev`)
 - **Bluetooth** — [`lib/bluetooth.ts`](./lib/bluetooth.ts). Filters for
   `Pocket` / `Radar` / `PR` devices, subscribes to every notify characteristic,
   and parses speed bytes (ASCII, 8-bit, or 16-bit LE) into mph.
+- **Lineup-card OCR** — [`components/LineupScanner.tsx`](./components/LineupScanner.tsx)
+  + [`lib/lineupParse.ts`](./lib/lineupParse.ts). Snap a photo of the paper
+  lineup card; [Tesseract.js](https://tesseract.js.org) runs **entirely
+  on-device** (the image never leaves the phone) and the parser maps
+  scorekeeping position numbers (1=P … 9=RF) to defensive positions. Results
+  land in an editable review table before they replace/append the roster.
 - **Streaming** — [`lib/streaming.ts`](./lib/streaming.ts). Composites the
   camera frame and canvas overlay ([`lib/overlayCanvas.ts`](./lib/overlayCanvas.ts)),
   then publishes the combined `MediaStream` to a **WHIP** ingest endpoint
