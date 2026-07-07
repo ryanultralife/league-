@@ -213,16 +213,29 @@ function RadarTab() {
     [setSpeed],
   );
 
-  const connect = useCallback(async () => {
-    try {
-      setStatus('Requesting device…');
-      connRef.current = await connectRadar(onSpeed, setStatus);
-      setConnected(true);
-    } catch (e: any) {
-      setStatus(e?.message || 'Connection failed');
-      setConnected(false);
+  const [manual, setManual] = useState('');
+
+  const connect = useCallback(
+    async (allDevices = false) => {
+      try {
+        setStatus('Requesting device…');
+        connRef.current = await connectRadar(onSpeed, setStatus, { allDevices });
+        setConnected(true);
+      } catch (e: any) {
+        setStatus(e?.message || 'Connection failed');
+        setConnected(false);
+      }
+    },
+    [onSpeed],
+  );
+
+  const submitManual = useCallback(() => {
+    const n = parseInt(manual, 10);
+    if (!Number.isNaN(n)) {
+      onSpeed(n);
+      setManual('');
     }
-  }, [onSpeed]);
+  }, [manual, onSpeed]);
 
   const disconnect = useCallback(() => {
     connRef.current?.disconnect();
@@ -247,12 +260,20 @@ function RadarTab() {
           over HTTPS. iOS Safari does not support Web Bluetooth.
         </p>
       ) : !connected ? (
-        <button
-          onClick={connect}
-          className="tap-target w-full rounded-xl bg-sky-500 py-4 text-lg font-bold active:scale-95"
-        >
-          🔗 Connect Radar
-        </button>
+        <div className="space-y-2">
+          <button
+            onClick={() => connect(false)}
+            className="tap-target w-full rounded-xl bg-sky-500 py-4 text-lg font-bold active:scale-95"
+          >
+            🔗 Connect Radar
+          </button>
+          <button
+            onClick={() => connect(true)}
+            className="tap-target w-full rounded-lg bg-white/10 py-2.5 text-sm font-semibold active:scale-95"
+          >
+            Can&apos;t find it? Show all Bluetooth devices
+          </button>
+        </div>
       ) : (
         <button
           onClick={disconnect}
@@ -264,8 +285,36 @@ function RadarTab() {
 
       <p className="text-center text-sm text-white/60">{status}</p>
       <p className="text-center text-xs text-white/40">
-        Scans for devices named “Pocket”, “Radar”, or “PR”.
+        Scans for devices named “Pocket”, “Radar”, or “PR”. Close the Pocket Radar app and forget
+        the gun in your phone&apos;s Bluetooth settings first — a device already connected elsewhere
+        can&apos;t be claimed here.
       </p>
+
+      {/* Manual entry: always works, even if the gun only talks to its own app. */}
+      <div className="rounded-2xl bg-white/5 p-4">
+        <div className="mb-2 text-xs font-bold uppercase tracking-widest text-white/60">
+          Manual speed
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            inputMode="numeric"
+            value={manual}
+            onChange={(e) => setManual(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+            onKeyDown={(e) => e.key === 'Enter' && submitManual()}
+            placeholder="mph"
+            className="h-12 w-24 rounded-lg bg-black/40 px-3 text-center font-score text-2xl ring-1 ring-white/10 focus:outline-none focus:ring-accent"
+          />
+          <button
+            onClick={submitManual}
+            className="tap-target h-12 flex-1 rounded-lg bg-accent text-lg font-bold text-broadcast active:scale-95"
+          >
+            Set speed
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-white/40">
+          Read the number off the radar and tap it in — pushes to the overlay instantly.
+        </p>
+      </div>
 
       {history.length > 0 && (
         <div className="rounded-2xl bg-white/5 p-4">

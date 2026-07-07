@@ -54,20 +54,24 @@ export function parseSpeed(view: DataView): number | null {
 export async function connectRadar(
   onSpeed: (mph: number) => void,
   onStatus?: (s: string) => void,
+  opts?: { allDevices?: boolean },
 ): Promise<RadarConnection> {
   if (!bluetoothSupported()) {
     throw new Error('Web Bluetooth is not available in this browser.');
   }
   onStatus?.('Requesting device…');
-  const device = await (navigator as any).bluetooth.requestDevice({
-    filters: NAME_PREFIXES.map((p) => ({ namePrefix: p })),
-    // Accept all services so we can discover the vendor-specific notify char.
-    optionalServices: [
-      0xffe0, 0xfff0, 0x180a, 0x180f,
-      '0000ffe0-0000-1000-8000-00805f9b34fb',
-      '0000fff0-0000-1000-8000-00805f9b34fb',
-    ],
-  });
+  // Accept all services so we can discover the vendor-specific notify char.
+  const optionalServices = [
+    0xffe0, 0xfff0, 0x180a, 0x180f,
+    '0000ffe0-0000-1000-8000-00805f9b34fb',
+    '0000fff0-0000-1000-8000-00805f9b34fb',
+  ];
+  // Default: filter to likely radar names. Fallback: list every device so a
+  // gun that advertises under an unexpected name can still be selected.
+  const request = opts?.allDevices
+    ? { acceptAllDevices: true, optionalServices }
+    : { filters: NAME_PREFIXES.map((p) => ({ namePrefix: p })), optionalServices };
+  const device = await (navigator as any).bluetooth.requestDevice(request);
 
   onStatus?.(`Connecting to ${device.name || 'radar'}…`);
   const server = await device.gatt!.connect();
