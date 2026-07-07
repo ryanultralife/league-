@@ -47,6 +47,8 @@ interface StoreApi {
   toggleBase: (base: 'first' | 'second' | 'third') => void;
   setSpeed: (mph: number) => void;
   setTeamName: (side: TeamSide, name: string) => void;
+  /** Reset scores/count/box for a new game; keeps rosters, names, and pins. */
+  resetGame: () => void;
 
   // Computer-vision bulk apply (from the pixel watcher)
   applyVision: (partial: {
@@ -252,6 +254,28 @@ export const useGameStore = create<StoreApi>((set, get) => {
       mutate((d) => {
         if (side === 'home') d.session.home_name = name.toUpperCase().slice(0, 12);
         else d.session.guest_name = name.toUpperCase().slice(0, 12);
+      }),
+
+    resetGame: () =>
+      mutate((d) => {
+        // Zero the live game while keeping rosters, team names, and calibration.
+        d.session.balls = 0;
+        d.session.strikes = 0;
+        d.session.outs = 0;
+        d.session.home_score = 0;
+        d.session.guest_score = 0;
+        d.session.inning = 1;
+        d.session.inning_half = 'top';
+        d.session.current_speed = 0;
+        d.session.bases = { first: false, second: false, third: false };
+        d.box = { home: { runs: [], hits: 0, errors: 0 }, guest: { runs: [], hits: 0, errors: 0 } };
+        // Clear per-game player lines and set the away leadoff hitter at bat.
+        (['home', 'guest'] as TeamSide[]).forEach((side) => {
+          d.lineups[side] = d.lineups[side].map((p) => ({ ...p, ab: 0, hits: 0, rbi: 0, is_at_bat: false }));
+        });
+        const leadoff =
+          d.lineups.guest.find((p) => p.batting_order_position === 1) ?? d.lineups.guest[0];
+        if (leadoff) leadoff.is_at_bat = true;
       }),
 
     applyVision: (partial) => {

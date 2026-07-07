@@ -17,9 +17,69 @@
 // ("msg") with the real event name in the payload, which avoids listener-
 // ordering pitfalls with channel subscription.
 
-const ROOM = process.env.NEXT_PUBLIC_GAME_ROOM || 'default-game';
-const CHANNEL = `diamond-overlay:${ROOM}`;
+const ENV_ROOM = process.env.NEXT_PUBLIC_GAME_ROOM || 'default-game';
+const ROOM_KEY = 'diamond-room';
 const WIRE_EVENT = 'msg';
+
+/**
+ * Resolve the game room at runtime so operators can use a private, hard-to-
+ * guess code without redeploying. Precedence:
+ *   1. ?game= / ?room= URL param (also persisted, so an invite link sticks)
+ *   2. a room previously chosen on this device (localStorage)
+ *   3. the deployment default (NEXT_PUBLIC_GAME_ROOM)
+ * The env default is preserved when nothing overrides it, so existing shared
+ * setups keep working.
+ */
+function resolveRoom(): string {
+  if (typeof window === 'undefined') return ENV_ROOM;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = (params.get('game') || params.get('room') || '').trim();
+    if (fromUrl) {
+      localStorage.setItem(ROOM_KEY, fromUrl);
+      return fromUrl;
+    }
+    const saved = localStorage.getItem(ROOM_KEY);
+    if (saved) return saved;
+  } catch {
+    /* ignore */
+  }
+  return ENV_ROOM;
+}
+
+let resolvedRoom: string | null = null;
+/** The active game room for this session (resolved once). */
+export function currentRoom(): string {
+  if (resolvedRoom === null) resolvedRoom = resolveRoom();
+  return resolvedRoom;
+}
+
+/** Persist a new room code and reload so every transport reconnects to it. */
+export function setRoom(code: string) {
+  if (typeof window === 'undefined') return;
+  const clean = code.trim();
+  try {
+    if (clean) localStorage.setItem(ROOM_KEY, clean);
+    else localStorage.removeItem(ROOM_KEY);
+  } catch {
+    /* ignore */
+  }
+  // Drop any ?game= param and reload onto the chosen room.
+  const url = new URL(window.location.href);
+  url.searchParams.delete('game');
+  url.searchParams.delete('room');
+  window.location.href = url.toString();
+}
+
+/** A shareable invite link that carries the current room. */
+export function inviteLink(): string {
+  if (typeof window === 'undefined') return '';
+  const url = new URL(window.location.origin + '/');
+  url.searchParams.set('game', currentRoom());
+  return url.toString();
+}
+
+const channelFor = (room: string) => `diamond-overlay:${room}`;
 
 export type SyncStatus = 'connecting' | 'connected' | 'local';
 
@@ -65,8 +125,6 @@ export function supabaseConfigured(): boolean {
 export const SYNC_MODE = (): 'supabase' | 'local' =>
   supabaseConfigured() ? 'supabase' : 'local';
 
-export const GAME_ROOM = ROOM;
-
 // --------------------------------------------------------------------------
 // Shared listener bookkeeping
 // --------------------------------------------------------------------------
@@ -97,7 +155,7 @@ class SupabaseTransport implements SyncTransport {
   private peerCount = 1;
   private presenceKey = `k_${Math.floor(performance.now())}_${makeOriginId().slice(-6)}`;
 
-  constructor() {
+  constructor(private channelName: string) {
     void this.init();
   }
 
@@ -109,7 +167,7 @@ class SupabaseTransport implements SyncTransport {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string,
         { realtime: { params: { eventsPerSecond: 20 } } },
       );
-      this.channel = this.client.channel(CHANNEL, {
+      this.channel = this.client.channel(this.channelName, {
         config: {
           broadcast: { self: false, ack: false },
           presence: { key: this.presenceKey },
@@ -193,16 +251,16 @@ class LocalTransport implements SyncTransport {
   private storageListener?: (e: StorageEvent) => void;
   private readyFired = false;
 
-  constructor() {
+  constructor(private channelName: string) {
     try {
-      this.bc = new BroadcastChannel(CHANNEL);
+      this.bc = new BroadcastChannel(channelName);
       this.bc.onmessage = (e) => {
         const env = e.data as { event: string; payload: unknown } | undefined;
         if (env?.event) this.listeners.emit(env.event, env.payload);
       };
     } catch {
       this.storageListener = (e: StorageEvent) => {
-        if (e.key === CHANNEL && e.newValue) {
+        if (e.key === channelName && e.newValue) {
           try {
             const env = JSON.parse(e.newValue) as { event: string; payload: unknown };
             if (env?.event) this.listeners.emit(env.event, env.payload);
@@ -220,7 +278,7 @@ class LocalTransport implements SyncTransport {
     try {
       if (this.bc) this.bc.postMessage(env);
       // Nudge localStorage so brand-new tabs can hydrate the latest snapshot.
-      localStorage.setItem(CHANNEL, JSON.stringify(env));
+      localStorage.setItem(this.channelName, JSON.stringify(env));
     } catch {
       /* ignore quota / serialization errors */
     }
@@ -278,7 +336,10 @@ export function getTransport(): SyncTransport {
     };
   }
   if (!singleton) {
-    singleton = supabaseConfigured() ? new SupabaseTransport() : new LocalTransport();
+    const channel = channelFor(currentRoom());
+    singleton = supabaseConfigured()
+      ? new SupabaseTransport(channel)
+      : new LocalTransport(channel);
   }
   return singleton;
 }

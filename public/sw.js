@@ -3,7 +3,7 @@
 // dropped connection at the ballpark doesn't blank the overlay. Live game
 // state still flows through the realtime channel; this only caches the shell.
 const CACHE = 'diamond-overlay-v1';
-const SHELL = ['/', '/stream', '/controller', '/lineup', '/view', '/manifest.json'];
+const SHELL = ['/', '/stream', '/controller', '/lineup', '/view', '/watch', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

@@ -17,6 +17,7 @@ device stays in sync in real time.
 | [`/controller`](./app/controller/page.tsx) | Operator's phone | **Connect Radar** over Web Bluetooth, high-visibility manual count/score/base overrides, and an interactive **calibration** camera to drop scoreboard pins. |
 | [`/lineup`](./app/lineup/page.tsx) | Dugout tablet | Roster + batting-order setup (or **scan a photo of the paper lineup card** — on-device OCR that reads positions from scorekeeping numbers), **advance current batter**, on-the-fly defensive swaps, and a **box-score editor** for hits/errors/line score. |
 | [`/view`](./app/view/page.tsx) | Fans / second screen | **Read-only** live scoreboard (score, count, R/H/E line score, batter/pitcher, base runners, radar). No controls, no camera, no permissions — a safe link to share publicly. |
+| [`/watch`](./app/watch/page.tsx) | Fans | **Branded video player** for the live Livepeer stream (overlay burned in). Native HLS on Safari/iOS, `hls.js` elsewhere; auto-recovers when the broadcast starts. Playback ID via `NEXT_PUBLIC_LIVEPEER_PLAYBACK_ID` or `/watch?v=<id>`. |
 
 Open [`/`](./app/page.tsx) for the hub linking all three.
 

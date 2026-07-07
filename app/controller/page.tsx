@@ -177,6 +177,17 @@ function ScoreTab() {
         <span className="font-score text-3xl font-black text-accent">{s.current_speed || '—'}</span>
         <span className="text-sm text-white/50">mph</span>
       </div>
+
+      <button
+        onClick={() => {
+          if (window.confirm('Start a new game? This zeroes the score, count, and box score. Rosters, team names, and calibration are kept.')) {
+            store.resetGame();
+          }
+        }}
+        className="tap-target w-full rounded-xl border border-red-500/30 bg-red-500/10 py-3 text-sm font-bold text-red-200 active:scale-95"
+      >
+        ⟳ New Game (reset score)
+      </button>
     </div>
   );
 }

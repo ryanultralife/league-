@@ -35,6 +35,7 @@
     { "name": "Stream View", "short_name": "Stream", "url": "/stream" },
     { "name": "Controller", "short_name": "Control", "url": "/controller" },
     { "name": "Lineup Manager", "short_name": "Lineup", "url": "/lineup" },
-    { "name": "View Only", "short_name": "View", "url": "/view" }
+    { "name": "View Only", "short_name": "View", "url": "/view" },
+    { "name": "Watch", "short_name": "Watch", "url": "/watch" }
   ]
 }

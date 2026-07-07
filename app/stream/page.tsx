@@ -105,8 +105,18 @@ export default function StreamPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    // Composite at ~30 FPS to match captureStream and halve the per-frame work
-    // on older phones (rAF would otherwise redraw the overlay at up to 60 FPS).
+    // The overlay graphics are expensive to draw but change rarely, so cache
+    // them on a transparent offscreen canvas and only re-render when the game
+    // state actually changes (tracked by rev). Each frame we just composite the
+    // camera + the cached overlay — cheap enough for an older phone.
+    const overlay = document.createElement('canvas');
+    overlay.width = W;
+    overlay.height = H;
+    const octx = overlay.getContext('2d');
+    let overlayRev = -1;
+
+    // Composite at ~30 FPS to match captureStream (rAF would otherwise run at
+    // up to 60 FPS).
     const FRAME_MS = 1000 / 30;
     let last = 0;
     const render = (ts: number) => {
@@ -115,11 +125,17 @@ export default function StreamPage() {
       last = ts;
       if (video.readyState >= 2) {
         ctx.drawImage(video, 0, 0, W, H);
-        try {
-          drawOverlay(ctx, W, H, stateRef.current);
-        } catch {
-          /* draw errors shouldn't kill the stream */
+        const st = stateRef.current;
+        if (octx && st.rev !== overlayRev) {
+          octx.clearRect(0, 0, W, H);
+          try {
+            drawOverlay(octx, W, H, st);
+          } catch {
+            /* draw errors shouldn't kill the stream */
+          }
+          overlayRev = st.rev;
         }
+        ctx.drawImage(overlay, 0, 0);
       }
     };
     rafRef.current = requestAnimationFrame(render);

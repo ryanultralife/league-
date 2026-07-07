@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useHydratedStore } from '@/lib/hooks';
 import { useGameStore } from '@/lib/store';
-import { SYNC_MODE } from '@/lib/sync';
+import { SYNC_MODE, currentRoom, inviteLink, setRoom } from '@/lib/sync';
+import { useState } from 'react';
 
 const CARDS = [
   {
@@ -29,6 +30,12 @@ const CARDS = [
     title: 'View Only',
     emoji: '📺',
     desc: 'Read-only live scoreboard to share with fans or put on a second screen. No controls, no camera, no permissions.',
+  },
+  {
+    href: '/watch',
+    title: 'Watch',
+    emoji: '▶️',
+    desc: 'Branded public player for the live video stream (overlay burned in). Share this link with fans.',
   },
 ];
 
@@ -64,7 +71,7 @@ export default function Home() {
           </div>
         )}
 
-        <div className="mb-8 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
+        <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
           <div className="flex items-center justify-between">
             <span>
               Active game:{' '}
@@ -78,7 +85,9 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {mode === 'supabase' && <GameCodeCard />}
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {CARDS.map((c) => (
             <Link
               key={c.href}
@@ -108,6 +117,74 @@ export default function Home() {
         </footer>
       </div>
     </main>
+  );
+}
+
+function GameCodeCard() {
+  const [room, setRoomState] = useState(() => currentRoom());
+  const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(room);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteLink());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked */
+    }
+  };
+
+  return (
+    <div className="mb-8 rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-widest text-white/40">Game code</div>
+          {!editing ? (
+            <button
+              onClick={() => {
+                setDraft(room);
+                setEditing(true);
+              }}
+              className="font-score text-lg font-bold text-chalk"
+              title="Tap to change"
+            >
+              {room} <span className="text-xs font-normal text-white/40">✎</span>
+            </button>
+          ) : (
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))}
+                placeholder="private-code"
+                className="w-40 rounded bg-black/40 px-2 py-1 text-sm ring-1 ring-white/10 focus:outline-none focus:ring-accent"
+              />
+              <button
+                onClick={() => setRoom(draft || room)}
+                className="rounded bg-accent px-3 py-1 text-sm font-bold text-broadcast"
+              >
+                Join
+              </button>
+              <button onClick={() => setEditing(false)} className="text-xs text-white/40">
+                cancel
+              </button>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={copy}
+          className="tap-target rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold active:scale-95"
+        >
+          {copied ? '✓ Copied' : '🔗 Copy invite link'}
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-white/40">
+        All devices on this code share the game. Use a private, hard-to-guess code and share the
+        invite link so only your devices join — the realtime channel is open to anyone who knows the
+        code. Setting the room here (or opening an invite link) reconnects this device.
+      </p>
+    </div>
   );
 }
 
