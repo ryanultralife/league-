@@ -1,22 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { useHydratedStore } from '@/lib/hooks';
+import { useRole } from '@/lib/hooks';
 import { useGameStore } from '@/lib/store';
 import { SYNC_MODE, currentRoom, inviteLink, setRoom } from '@/lib/sync';
 import { useState } from 'react';
 
-const CARDS = [
-  {
-    href: '/stream',
-    title: 'Stream View',
-    emoji: '📹',
-    desc: 'Hang the phone, show the camera, draw the broadcast overlay, and go live. Runs the pixel-watcher CV loop.',
-  },
+// Single-occupancy roles (stream, controller) are disabled on everyone else's
+// home screen while a device holds them; cards opt in via their `role` field.
+type Card = { href: string; title: string; emoji: string; desc: string; role?: string };
+const CARDS: Card[] = [
   {
     href: '/controller',
     title: 'Controller',
     emoji: '🎛️',
+    role: 'controller',
     desc: 'Connect the radar over Bluetooth, override the count/score by touch, and drop calibration pins.',
   },
   {
@@ -40,12 +38,18 @@ const CARDS = [
 ];
 
 export default function Home() {
-  useHydratedStore();
+  useRole('home');
   const status = useGameStore((s) => s.syncStatus);
   const peers = useGameStore((s) => s.peers);
+  const presence = useGameStore((s) => s.presence);
+  const origin = useGameStore((s) => s.origin);
   const home = useGameStore((s) => s.state.session.home_name);
   const guest = useGameStore((s) => s.state.session.guest_name);
   const mode = SYNC_MODE();
+
+  // A role is "taken" only when a *different* device is on it.
+  const takenBy = (role: string) =>
+    presence.some((m) => m?.role === role && m?.origin && m.origin !== origin);
 
   return (
     <main className="min-h-screen bg-broadcast px-5 py-10 sm:px-8">
@@ -87,20 +91,44 @@ export default function Home() {
 
         {mode === 'supabase' && <GameCodeCard />}
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {CARDS.map((c) => (
-            <Link
-              key={c.href}
-              href={c.href}
-              className="group flex flex-col rounded-2xl border border-white/10 bg-white/5 p-5 transition hover:border-accent/60 hover:bg-white/10"
-            >
-              <span className="mb-3 text-4xl">{c.emoji}</span>
-              <h2 className="mb-1 text-lg font-bold text-chalk group-hover:text-accent">
-                {c.title}
-              </h2>
-              <p className="text-sm leading-snug text-white/60">{c.desc}</p>
-            </Link>
-          ))}
+        {/* Primary action: start the broadcast. Grays out if a stream device is
+            already live in this game. */}
+        <StreamHero taken={takenBy('stream')} />
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {CARDS.map((c) => {
+            const taken = c.role ? takenBy(c.role) : false;
+            if (taken) {
+              return (
+                <div
+                  key={c.href}
+                  aria-disabled
+                  className="flex cursor-not-allowed flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-5 opacity-50"
+                >
+                  <span className="mb-3 text-4xl grayscale">{c.emoji}</span>
+                  <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-white/50">
+                    {c.title}
+                  </h2>
+                  <p className="text-sm leading-snug text-white/30">
+                    In use on another device.
+                  </p>
+                </div>
+              );
+            }
+            return (
+              <Link
+                key={c.href}
+                href={c.href}
+                className="group flex flex-col rounded-2xl border border-white/10 bg-white/5 p-5 transition hover:border-accent/60 hover:bg-white/10"
+              >
+                <span className="mb-3 text-4xl">{c.emoji}</span>
+                <h2 className="mb-1 text-lg font-bold text-chalk group-hover:text-accent">
+                  {c.title}
+                </h2>
+                <p className="text-sm leading-snug text-white/60">{c.desc}</p>
+              </Link>
+            );
+          })}
         </div>
 
         <footer className="mt-10 space-y-2 text-xs text-white/40">
@@ -117,6 +145,42 @@ export default function Home() {
         </footer>
       </div>
     </main>
+  );
+}
+
+function StreamHero({ taken }: { taken: boolean }) {
+  if (taken) {
+    return (
+      <div
+        aria-disabled
+        className="flex cursor-not-allowed items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6 opacity-60"
+      >
+        <span className="text-5xl grayscale">📹</span>
+        <div>
+          <h2 className="text-xl font-black text-white/50">Stream in use</h2>
+          <p className="text-sm text-white/40">
+            Another device is already the broadcast camera for this game.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <Link
+      href="/stream"
+      className="group flex items-center gap-4 rounded-2xl border-2 border-accent bg-accent/15 p-6 shadow-broadcast transition hover:bg-accent/25"
+    >
+      <span className="text-5xl">📹</span>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-2xl font-black tracking-tight text-accent">Start Stream</h2>
+        <p className="text-sm text-white/70">
+          Hang the phone, show the camera, draw the broadcast overlay, and go live.
+        </p>
+      </div>
+      <span className="hidden shrink-0 rounded-xl bg-accent px-4 py-2 text-sm font-black text-broadcast sm:block">
+        Go →
+      </span>
+    </Link>
   );
 }
 

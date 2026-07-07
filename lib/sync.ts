@@ -94,6 +94,10 @@ export interface SyncTransport {
   status(): SyncStatus;
   /** Number of connected devices (presence). 1 when unknown. */
   peers(): number;
+  /** Advertise this device's metadata (e.g. which role it's on) to peers. */
+  setPresence(meta: Record<string, unknown>): void;
+  /** Metadata for every connected device (including self). */
+  presence(): Array<Record<string, any>>;
   close(): void;
 }
 
@@ -154,6 +158,8 @@ class SupabaseTransport implements SyncTransport {
   private readyCbs = new Set<() => void>();
   private peerCount = 1;
   private presenceKey = `k_${Math.floor(performance.now())}_${makeOriginId().slice(-6)}`;
+  private meta: Record<string, unknown> = {};
+  private members: Array<Record<string, any>> = [];
 
   constructor(private channelName: string) {
     void this.init();
@@ -182,6 +188,7 @@ class SupabaseTransport implements SyncTransport {
       this.channel.on('presence', { event: 'sync' }, () => {
         try {
           const st = this.channel.presenceState();
+          this.members = Object.values(st).flat() as Array<Record<string, any>>;
           this.peerCount = Math.max(1, Object.keys(st).length);
         } catch {
           /* noop */
@@ -192,7 +199,7 @@ class SupabaseTransport implements SyncTransport {
         if (s === 'SUBSCRIBED') {
           this.state = 'connected';
           try {
-            await this.channel.track({ id: this.presenceKey });
+            await this.channel.track({ id: this.presenceKey, ...this.meta });
           } catch {
             /* presence best-effort */
           }
@@ -229,6 +236,17 @@ class SupabaseTransport implements SyncTransport {
 
   peers() {
     return this.peerCount;
+  }
+
+  setPresence(meta: Record<string, unknown>) {
+    this.meta = { ...this.meta, ...meta };
+    if (this.channel && this.state === 'connected') {
+      this.channel.track({ id: this.presenceKey, ...this.meta }).catch(() => {});
+    }
+  }
+
+  presence() {
+    return this.members;
   }
 
   close() {
@@ -307,6 +325,12 @@ class LocalTransport implements SyncTransport {
     return 1;
   }
 
+  // Single-device mode: no cross-device presence to advertise or observe.
+  setPresence() {}
+  presence() {
+    return [] as Array<Record<string, any>>;
+  }
+
   close() {
     this.bc?.close();
     if (this.storageListener) window.removeEventListener('storage', this.storageListener);
@@ -331,6 +355,10 @@ export function getTransport(): SyncTransport {
       },
       peers() {
         return 1;
+      },
+      setPresence() {},
+      presence() {
+        return [];
       },
       close() {},
     };

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/lib/store';
-import { useHydratedStore, useWakeLock } from '@/lib/hooks';
+import { useRole, useWakeLock } from '@/lib/hooks';
 import { BroadcastOverlay } from '@/components/Overlay';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { readState, COLOR_DELTA_THRESHOLD } from '@/lib/vision';
@@ -14,7 +14,7 @@ import { SYNC_MODE } from '@/lib/sync';
 const WATCH_FPS = 5;
 
 export default function StreamPage() {
-  useHydratedStore();
+  useRole('stream');
   useWakeLock(true);
 
   const applyVision = useGameStore((s) => s.applyVision);

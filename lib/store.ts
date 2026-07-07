@@ -28,6 +28,8 @@ interface StoreApi {
   syncStatus: 'connecting' | 'connected' | 'local';
   /** Number of devices currently connected to the game room. */
   peers: number;
+  /** Presence metadata for every connected device (role, origin, …). */
+  presence: Array<Record<string, any>>;
   /** Local epoch (ms) until which the pixel-watcher should defer to a human. */
   suppressVisionUntil: number;
 
@@ -134,6 +136,7 @@ export const useGameStore = create<StoreApi>((set, get) => {
     ready: false,
     syncStatus: 'connecting',
     peers: 1,
+    presence: [],
     suppressVisionUntil: 0,
 
     hydrate() {
@@ -183,7 +186,12 @@ export const useGameStore = create<StoreApi>((set, get) => {
       });
 
       // Poll transport status + presence for the UI.
-      const tick = () => set({ syncStatus: transport.status(), peers: transport.peers() });
+      const tick = () =>
+        set({
+          syncStatus: transport.status(),
+          peers: transport.peers(),
+          presence: transport.presence(),
+        });
       tick();
       const interval = window.setInterval(tick, 1500);
       window.addEventListener('beforeunload', () => window.clearInterval(interval));

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore, battingSide } from '@/lib/store';
-import { useHydratedStore, useWakeLock } from '@/lib/hooks';
+import { useRole, useWakeLock } from '@/lib/hooks';
 import { connectRadar, bluetoothSupported, type RadarConnection } from '@/lib/bluetooth';
 import { Stepper } from '@/components/Stepper';
 import { sampleRgb } from '@/lib/vision';
@@ -12,7 +12,7 @@ import type { CalibrationPin } from '@/lib/types';
 type Tab = 'score' | 'radar' | 'calibrate';
 
 export default function ControllerPage() {
-  useHydratedStore();
+  useRole('controller');
   useWakeLock(true);
   const [tab, setTab] = useState<Tab>('score');
 

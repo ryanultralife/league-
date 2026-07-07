@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useGameStore } from './store';
+import { getTransport } from './sync';
 
 /** Ensure the store hydrates + connects exactly once on the client. */
 export function useHydratedStore() {
@@ -10,6 +11,21 @@ export function useHydratedStore() {
   useEffect(() => {
     hydrate();
   }, [hydrate]);
+  return ready;
+}
+
+/**
+ * Hydrate + advertise which role (view) this device is on via presence, so the
+ * home screen can show single-occupancy roles (Stream, Controller) as taken.
+ */
+export function useRole(role: string) {
+  const hydrate = useGameStore((s) => s.hydrate);
+  const ready = useGameStore((s) => s.ready);
+  useEffect(() => {
+    hydrate();
+    const origin = useGameStore.getState().origin;
+    getTransport().setPresence({ role, origin });
+  }, [hydrate, role]);
   return ready;
 }
 
