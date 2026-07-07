@@ -10,7 +10,7 @@ import type {
   InningHalf,
 } from './types';
 import { getTransport, makeOriginId } from './sync';
-import { makeInitialState } from './defaults';
+import { makeInitialState, normalizeState } from './defaults';
 
 const PERSIST_KEY = 'diamond-overlay:state';
 
@@ -111,11 +111,16 @@ export const useGameStore = create<StoreApi>((set, get) => {
     });
   }
 
-  /** Adopt an incoming full-state document from a peer, and persist it. */
+  /**
+   * Adopt an incoming full-state document from a peer, and persist it. The
+   * payload is normalized first so a stale/old-shaped state from another device
+   * can never crash the overlay or CV loop.
+   */
   function adopt(remote: GameState) {
-    set({ state: remote });
+    const safe = normalizeState(remote, origin);
+    set({ state: safe });
     try {
-      localStorage.setItem(PERSIST_KEY, JSON.stringify(remote));
+      localStorage.setItem(PERSIST_KEY, JSON.stringify(safe));
     } catch {
       /* ignore */
     }
@@ -132,11 +137,11 @@ export const useGameStore = create<StoreApi>((set, get) => {
     hydrate() {
       if (typeof window === 'undefined' || get().ready) return;
       // Load any persisted state first so a reconnecting device isn't blank.
+      // Normalize it: a device may hold state written by an older build.
       try {
         const raw = localStorage.getItem(PERSIST_KEY);
         if (raw) {
-          const parsed = JSON.parse(raw) as GameState;
-          set({ state: { ...parsed, origin } });
+          set({ state: normalizeState(JSON.parse(raw), origin) });
         }
       } catch {
         /* ignore malformed persisted state */

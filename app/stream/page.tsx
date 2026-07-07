@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/lib/store';
 import { useHydratedStore, useWakeLock } from '@/lib/hooks';
 import { BroadcastOverlay } from '@/components/Overlay';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { readState, COLOR_DELTA_THRESHOLD } from '@/lib/vision';
 import { drawOverlay } from '@/lib/overlayCanvas';
 import { startWhip, startRecording, type WhipSession, type Recorder } from '@/lib/streaming';
@@ -18,6 +19,7 @@ export default function StreamPage() {
 
   const applyVision = useGameStore((s) => s.applyVision);
   const pins = useGameStore((s) => s.state.session.calibration_pins);
+  const rev = useGameStore((s) => s.state.rev);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const sampleCanvasRef = useRef<HTMLCanvasElement>(null); // hidden CV sampler
@@ -182,8 +184,14 @@ export default function StreamPage() {
         className="absolute inset-0 h-full w-full object-cover"
       />
 
-      {/* Broadcast overlay (operator monitor) */}
-      {cameraOn && <BroadcastOverlay />}
+      {/* Broadcast overlay (operator monitor). Isolated so a render error in
+          the overlay can never take down the camera or the outgoing stream;
+          it auto-recovers on the next state update. */}
+      {cameraOn && (
+        <ErrorBoundary label="overlay" resetKey={rev}>
+          <BroadcastOverlay />
+        </ErrorBoundary>
+      )}
 
       {/* Hidden canvases */}
       <canvas ref={sampleCanvasRef} className="hidden" />
