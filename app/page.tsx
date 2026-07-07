@@ -24,6 +24,12 @@ const CARDS = [
     emoji: '📋',
     desc: 'Build rosters and batting orders, advance the batter, swap fielders, and edit the box score live.',
   },
+  {
+    href: '/view',
+    title: 'View Only',
+    emoji: '📺',
+    desc: 'Read-only live scoreboard to share with fans or put on a second screen. No controls, no camera, no permissions.',
+  },
 ];
 
 export default function Home() {
@@ -72,7 +78,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {CARDS.map((c) => (
             <Link
               key={c.href}

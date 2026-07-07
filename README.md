@@ -16,6 +16,7 @@ device stays in sync in real time.
 | [`/stream`](./app/stream/page.tsx) | Hanging phone | Full-screen back camera + transparent broadcast overlay. Runs a hidden-canvas **pixel-watcher at 5 FPS** that reads calibration pins and pushes derived game state. Composites camera + graphics and publishes via **WHIP (WebRTC)** or records locally. |
 | [`/controller`](./app/controller/page.tsx) | Operator's phone | **Connect Radar** over Web Bluetooth, high-visibility manual count/score/base overrides, and an interactive **calibration** camera to drop scoreboard pins. |
 | [`/lineup`](./app/lineup/page.tsx) | Dugout tablet | Roster + batting-order setup (or **scan a photo of the paper lineup card** — on-device OCR that reads positions from scorekeeping numbers), **advance current batter**, on-the-fly defensive swaps, and a **box-score editor** for hits/errors/line score. |
+| [`/view`](./app/view/page.tsx) | Fans / second screen | **Read-only** live scoreboard (score, count, R/H/E line score, batter/pitcher, base runners, radar). No controls, no camera, no permissions — a safe link to share publicly. |
 
 Open [`/`](./app/page.tsx) for the hub linking all three.
 
