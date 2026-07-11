@@ -51,6 +51,8 @@ interface StoreApi {
   setTeamName: (side: TeamSide, name: string) => void;
   /** Reset scores/count/box for a new game; keeps rosters, names, and pins. */
   resetGame: () => void;
+  /** Log a broadcast start/stop marker so video can be aligned to the timeline. */
+  logStream: (action: 'started' | 'stopped') => void;
 
   // Computer-vision bulk apply (from the pixel watcher)
   applyVision: (partial: {
@@ -81,6 +83,38 @@ interface StoreApi {
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
+}
+
+/** Play-by-play log cap: a full game is a few hundred events; keep headroom. */
+const MAX_EVENTS = 1000;
+let eventSeq = 0;
+
+/**
+ * Append a timestamped play-by-play event to the draft. Timestamps are the
+ * alignment key between game actions and the broadcast recording (VISION.md).
+ */
+function appendEvent(
+  d: GameState,
+  kind: import('./types').GameEvent['kind'],
+  data?: Record<string, string | number | boolean>,
+  player_id?: string,
+) {
+  d.events.push({
+    id: `ev_${Date.now()}_${eventSeq++}`,
+    ts: Date.now(),
+    kind,
+    inning: d.session.inning,
+    half: d.session.inning_half,
+    ...(player_id ? { player_id } : {}),
+    ...(data ? { data } : {}),
+  });
+  if (d.events.length > MAX_EVENTS) d.events.splice(0, d.events.length - MAX_EVENTS);
+}
+
+/** Current batter's player id (the default subject of count/out/speed events). */
+function atBatId(d: GameState): string | undefined {
+  const side: TeamSide = d.session.inning_half === 'top' ? 'guest' : 'home';
+  return d.lineups[side].find((p) => p.is_at_bat)?.id;
 }
 
 /** Recompute box-score run totals into the session score for a side. */
@@ -199,22 +233,37 @@ export const useGameStore = create<StoreApi>((set, get) => {
       set({ ready: true });
     },
 
-    setBalls: (n) => mutate((d) => (d.session.balls = clamp(n, 0, 3))),
-    setStrikes: (n) => mutate((d) => (d.session.strikes = clamp(n, 0, 2))),
-    setOuts: (n) => mutate((d) => (d.session.outs = clamp(n, 0, 2))),
+    setBalls: (n) =>
+      mutate((d) => {
+        d.session.balls = clamp(n, 0, 3);
+        appendEvent(d, 'count', { balls: d.session.balls, strikes: d.session.strikes }, atBatId(d));
+      }),
+    setStrikes: (n) =>
+      mutate((d) => {
+        d.session.strikes = clamp(n, 0, 2);
+        appendEvent(d, 'count', { balls: d.session.balls, strikes: d.session.strikes }, atBatId(d));
+      }),
+    setOuts: (n) =>
+      mutate((d) => {
+        d.session.outs = clamp(n, 0, 2);
+        appendEvent(d, 'out', { outs: d.session.outs }, atBatId(d));
+      }),
 
     bumpBall: () =>
       mutate((d) => {
         d.session.balls = d.session.balls >= 3 ? 0 : d.session.balls + 1;
+        appendEvent(d, 'count', { balls: d.session.balls, strikes: d.session.strikes }, atBatId(d));
       }),
     bumpStrike: () =>
       mutate((d) => {
         d.session.strikes = d.session.strikes >= 2 ? 0 : d.session.strikes + 1;
+        appendEvent(d, 'count', { balls: d.session.balls, strikes: d.session.strikes }, atBatId(d));
       }),
     bumpOut: () =>
       mutate((d) => {
         if (d.session.outs >= 2) {
           // Third out: reset count/outs and flip the half-inning.
+          appendEvent(d, 'out', { outs: 3 }, atBatId(d));
           d.session.outs = 0;
           d.session.balls = 0;
           d.session.strikes = 0;
@@ -224,8 +273,10 @@ export const useGameStore = create<StoreApi>((set, get) => {
             d.session.inning_half = 'top';
             d.session.inning += 1;
           }
+          appendEvent(d, 'inning');
         } else {
           d.session.outs += 1;
+          appendEvent(d, 'out', { outs: d.session.outs }, atBatId(d));
         }
       }),
 
@@ -243,20 +294,27 @@ export const useGameStore = create<StoreApi>((set, get) => {
         while (line.length <= idx) line.push(0);
         line[idx] = clamp((line[idx] || 0) + delta, 0, 99);
         syncScoreFromBox(d, side);
+        appendEvent(d, 'run', { side, delta }, atBatId(d));
       }),
 
     setInning: (inning, half) =>
       mutate((d) => {
         d.session.inning = clamp(inning, 1, 30);
         d.session.inning_half = half;
+        appendEvent(d, 'inning');
       }),
 
     toggleBase: (base) =>
       mutate((d) => {
         d.session.bases[base] = !d.session.bases[base];
+        appendEvent(d, 'base', { base, occupied: d.session.bases[base] });
       }),
 
-    setSpeed: (mph) => mutate((d) => (d.session.current_speed = clamp(Math.round(mph), 0, 130))),
+    setSpeed: (mph) =>
+      mutate((d) => {
+        d.session.current_speed = clamp(Math.round(mph), 0, 130);
+        appendEvent(d, 'speed', { mph: d.session.current_speed }, atBatId(d));
+      }),
 
     setTeamName: (side, name) =>
       mutate((d) => {
@@ -284,7 +342,12 @@ export const useGameStore = create<StoreApi>((set, get) => {
         const leadoff =
           d.lineups.guest.find((p) => p.batting_order_position === 1) ?? d.lineups.guest[0];
         if (leadoff) leadoff.is_at_bat = true;
+        // A reset starts a fresh timeline for the new game.
+        d.events = [];
+        appendEvent(d, 'reset');
       }),
+
+    logStream: (action) => mutate((d) => appendEvent(d, 'stream', { action })),
 
     applyVision: (partial) => {
       // Defer to a recent human override on any device.
@@ -305,13 +368,26 @@ export const useGameStore = create<StoreApi>((set, get) => {
       mutate((d) => {
         // Speed comes from the radar pin and is never a human "override", so it
         // always applies. Count/base fields are held during suppression.
-        if (partial.speed !== undefined)
+        if (partial.speed !== undefined && partial.speed !== d.session.current_speed) {
           d.session.current_speed = clamp(Math.round(partial.speed), 0, 130);
+          appendEvent(d, 'speed', { mph: d.session.current_speed, source: 'cv' }, atBatId(d));
+        }
         if (suppressed) return;
+        const before = { ...d.session, bases: { ...d.session.bases } };
         if (partial.balls !== undefined) d.session.balls = clamp(partial.balls, 0, 3);
         if (partial.strikes !== undefined) d.session.strikes = clamp(partial.strikes, 0, 2);
         if (partial.outs !== undefined) d.session.outs = clamp(partial.outs, 0, 2);
         if (partial.bases) d.session.bases = { ...d.session.bases, ...partial.bases };
+        // Log only what actually changed (CV runs at 5 FPS).
+        if (d.session.balls !== before.balls || d.session.strikes !== before.strikes)
+          appendEvent(
+            d,
+            'count',
+            { balls: d.session.balls, strikes: d.session.strikes, source: 'cv' },
+            atBatId(d),
+          );
+        if (d.session.outs !== before.outs)
+          appendEvent(d, 'out', { outs: d.session.outs, source: 'cv' }, atBatId(d));
       });
     },
 
@@ -332,14 +408,20 @@ export const useGameStore = create<StoreApi>((set, get) => {
         if (roster.length === 0) return;
         const curIdx = roster.findIndex((p) => p.is_at_bat);
         const nextIdx = curIdx === -1 ? 0 : (curIdx + 1) % roster.length;
-        const nextId = roster[nextIdx].id;
+        const next = roster[nextIdx];
         d.lineups[side] = d.lineups[side].map((p) => ({
           ...p,
-          is_at_bat: p.id === nextId,
+          is_at_bat: p.id === next.id,
         }));
         // A new plate appearance clears the count.
         d.session.balls = 0;
         d.session.strikes = 0;
+        appendEvent(
+          d,
+          'batter',
+          { name: next.name, jersey: next.jersey_number, side },
+          next.id,
+        );
       }),
 
     setCurrentBatter: (side, playerId) =>
@@ -348,6 +430,9 @@ export const useGameStore = create<StoreApi>((set, get) => {
           ...p,
           is_at_bat: p.id === playerId,
         }));
+        const pl = d.lineups[side].find((p) => p.id === playerId);
+        if (pl)
+          appendEvent(d, 'batter', { name: pl.name, jersey: pl.jersey_number, side }, pl.id);
       }),
 
     swapPosition: (side, playerId, pos) =>
@@ -375,10 +460,12 @@ export const useGameStore = create<StoreApi>((set, get) => {
     addHit: (side, delta) =>
       mutate((d) => {
         d.box[side].hits = clamp(d.box[side].hits + delta, 0, 999);
+        if (delta > 0) appendEvent(d, 'hit', { side }, atBatId(d));
       }),
     addError: (side, delta) =>
       mutate((d) => {
         d.box[side].errors = clamp(d.box[side].errors + delta, 0, 999);
+        if (delta > 0) appendEvent(d, 'error', { side });
       }),
   };
 });

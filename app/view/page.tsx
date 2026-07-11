@@ -10,7 +10,7 @@ import {
   fieldingSide,
 } from '@/lib/store';
 import { useHydratedStore, useWakeLock } from '@/lib/hooks';
-import type { GameState, TeamSide } from '@/lib/types';
+import type { GameEvent, GameState, TeamSide } from '@/lib/types';
 
 /**
  * Read-only spectator scoreboard. Subscribes to the same synced game room as
@@ -63,8 +63,87 @@ export default function ViewPage() {
           <Diamond state={state} />
           <Speed state={state} />
         </div>
+        <PlayByPlay state={state} />
       </div>
     </main>
+  );
+}
+
+// -------------------------------------------------------------------------
+
+function formatEvent(e: GameEvent): string | null {
+  const d = e.data || {};
+  switch (e.kind) {
+    case 'batter':
+      return `Now batting: #${d.jersey ?? '?'} ${d.name ?? ''}`;
+    case 'count':
+      return `Count ${d.balls}-${d.strikes}`;
+    case 'out':
+      return d.outs === 3 ? 'Out #3 — side retired' : `Out #${d.outs}`;
+    case 'run': {
+      const side = d.side === 'home' ? 'Home' : 'Away';
+      return (d.delta as number) > 0 ? `Run scores — ${side}` : `Run removed — ${side}`;
+    }
+    case 'speed':
+      return `${d.mph} MPH`;
+    case 'inning':
+      return `${e.half === 'top' ? 'Top' : 'Bottom'} ${e.inning}`;
+    case 'hit':
+      return `Hit — ${d.side === 'home' ? 'Home' : 'Away'}`;
+    case 'error':
+      return `Error — ${d.side === 'home' ? 'Home' : 'Away'}`;
+    case 'base':
+      return null; // too chatty for spectators
+    case 'stream':
+      return d.action === 'started' ? 'Broadcast started' : 'Broadcast ended';
+    case 'reset':
+      return 'New game';
+    default:
+      return null;
+  }
+}
+
+const EVENT_ICON: Partial<Record<GameEvent['kind'], string>> = {
+  batter: '🧢',
+  run: '🏃',
+  out: '❌',
+  speed: '📡',
+  inning: '↕️',
+  hit: '💥',
+  error: 'E',
+  stream: '📺',
+  reset: '🔄',
+  count: '·',
+};
+
+function PlayByPlay({ state }: { state: GameState }) {
+  const rows = state.events
+    .slice(-40)
+    .reverse()
+    .map((e) => ({ e, text: formatEvent(e) }))
+    .filter((r) => r.text)
+    .slice(0, 20);
+  if (rows.length === 0) return null;
+  return (
+    <div className="w-full max-w-4xl rounded-2xl bg-white/5 p-4 ring-1 ring-white/10">
+      <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-accent">
+        Play-by-play
+      </div>
+      <ul className="max-h-64 space-y-1.5 overflow-y-auto text-sm">
+        {rows.map(({ e, text }) => (
+          <li key={e.id} className="flex items-baseline gap-2">
+            <span className="w-10 shrink-0 font-score text-xs text-white/40">
+              {e.half === 'top' ? '▲' : '▼'}{e.inning}
+            </span>
+            <span className="w-5 shrink-0 text-center text-xs">{EVENT_ICON[e.kind] ?? '·'}</span>
+            <span className="min-w-0 flex-1 truncate text-white/80">{text}</span>
+            <span className="shrink-0 text-[10px] tabular-nums text-white/30">
+              {new Date(e.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

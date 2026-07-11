@@ -84,11 +84,43 @@ export interface BoxScore {
   guest: TeamLine;
 }
 
+/**
+ * A timestamped play-by-play entry. This is the metadata backbone of the
+ * platform (see docs/VISION.md): events aligned against the broadcast
+ * recording's timeline become automatic per-player cut lists.
+ */
+export interface GameEvent {
+  id: string;
+  /** Wall-clock epoch ms when the event happened. */
+  ts: number;
+  kind:
+    | 'count' // balls/strikes changed
+    | 'out' // outs changed
+    | 'inning' // half-inning flipped
+    | 'run' // run(s) scored
+    | 'batter' // new batter at the plate
+    | 'base' // base occupancy changed
+    | 'speed' // radar reading
+    | 'hit' // box-score hit
+    | 'error' // box-score error
+    | 'stream' // broadcast started/stopped (aligns video to timeline)
+    | 'reset'; // new game
+  /** Game context at event time. */
+  inning: number;
+  half: InningHalf;
+  /** Player this event is about, when known (the reel hook). */
+  player_id?: string;
+  /** Kind-specific payload (mph, side, delta, action, …). */
+  data?: Record<string, string | number | boolean>;
+}
+
 /** The full replicated document that flows over the realtime channel. */
 export interface GameState {
   session: GameSession;
   lineups: Lineups;
   box: BoxScore;
+  /** Timestamped play-by-play log (capped; newest last). */
+  events: GameEvent[];
   /** Monotonic version for last-writer-wins conflict resolution. */
   rev: number;
   /** Origin device id of the last mutation. */

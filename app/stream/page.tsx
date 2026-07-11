@@ -19,6 +19,7 @@ export default function StreamPage() {
   useWakeLock(true);
 
   const applyVision = useGameStore((s) => s.applyVision);
+  const logStream = useGameStore((s) => s.logStream);
   const pins = useGameStore((s) => s.state.session.calibration_pins);
   const rev = useGameStore((s) => s.state.rev);
 
@@ -175,7 +176,9 @@ export default function StreamPage() {
       setStatusMsg('🔴 Recording locally (no WHIP endpoint set)');
       recRef.current = startRecording(composite, (url) => setRecordUrl(url));
     }
-  }, [startCompositing, whipUrl, whipToken]);
+    // Timeline marker: lets game events be mapped to offsets in this recording.
+    logStream('started');
+  }, [startCompositing, whipUrl, whipToken, logStream]);
 
   const stopLive = useCallback(async () => {
     setLive(false);
@@ -185,7 +188,8 @@ export default function StreamPage() {
     recRef.current = null;
     stopCompositing();
     setStatusMsg('Stopped.');
-  }, [stopCompositing]);
+    logStream('stopped');
+  }, [stopCompositing, logStream]);
 
   useEffect(() => {
     return () => {

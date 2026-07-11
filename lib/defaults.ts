@@ -50,6 +50,7 @@ export function makeInitialState(origin: string): GameState {
       home: { runs: [], hits: 0, errors: 0 },
       guest: { runs: [], hits: 0, errors: 0 },
     },
+    events: [],
     rev: 0,
     origin,
   };
@@ -137,6 +138,9 @@ export function normalizeState(raw: any, origin: string): GameState {
       home: normLine(raw.box?.home),
       guest: normLine(raw.box?.guest),
     },
+    events: Array.isArray(raw.events)
+      ? raw.events.filter((e: any) => e && typeof e.ts === 'number' && typeof e.kind === 'string')
+      : [],
     rev: num(raw.rev),
     origin: str(raw.origin, origin),
   };
